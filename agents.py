@@ -98,7 +98,8 @@ class GroundingAgent:
             for fb in peer_feedback:
                 if "SYNTAX_ERROR" in fb or "INVALID_JSON_SYNTAX" in fb or "POTENTIAL_CONTRADICTION" in fb:
                     grounding_score = max(0.0, grounding_score - 0.15)
-                    flags.append("PENALIZED_BY_PEER_FEEDBACK")
+                    if "PENALIZED_BY_PEER_FEEDBACK" not in flags:
+                        flags.append("PENALIZED_BY_PEER_FEEDBACK")
 
         score = round(max(0.0, min(1.0, grounding_score)), 2)
         passed = score >= self.threshold
@@ -178,7 +179,8 @@ class ReasoningCritic:
             for fb in peer_feedback:
                 if "LOW_CONTEXT_GROUNDING" in fb or "HALLUCINATED_STATISTICS" in fb:
                     score = max(0.0, score - 0.20)
-                    flags.append("REASONING_DOUBT_FROM_GROUNDING")
+                    if "REASONING_DOUBT_FROM_GROUNDING" not in flags:
+                        flags.append("REASONING_DOUBT_FROM_GROUNDING")
 
         score = round(max(0.0, min(1.0, score)), 2)
         passed = score >= self.threshold
@@ -294,7 +296,7 @@ class SchemaSentinel:
                 if schema_target:
                     try:
                         validator_model = self._build_pydantic_model("RuntimeSchemaValidator", schema_target)
-                        validator_model.model_validate(parsed)
+                        validator_model.model_validate(parsed, strict=bool(expected_schema))
                         score = 1.0
                         flags.append("STRICT_SCHEMA_PASSED")
                     except ValidationError as val_err:
@@ -302,7 +304,11 @@ class SchemaSentinel:
                         score = max(0.0, 1.0 - (0.25 * err_count))
                         for err in val_err.errors():
                             loc = ".".join(str(l) for l in err["loc"])
-                            flags.append(f"MISSING_KEYS_{loc}")
+                            if err["type"] == "missing":
+                                flags.append(f"MISSING_KEYS_{loc}")
+                            else:
+                                flags.append(f"TYPE_ERROR_{loc}")
+                                flags.append(f"MISSING_KEYS_{loc}")
                 else:
                     score = 1.0
                     flags.append("VALID_JSON_OBJECT")
@@ -318,7 +324,7 @@ class SchemaSentinel:
             score = 1.0 if len(text) > 0 else 0.0
 
         score = round(max(0.0, min(1.0, score)), 2)
-        has_schema_error = any(f.startswith("MISSING_KEYS") or f in ("INVALID_JSON_SYNTAX", "JSON_NOT_AN_OBJECT", "MISSING_BULLET_LIST_FORMAT") for f in flags)
+        has_schema_error = any(f.startswith(("MISSING_KEYS", "TYPE_ERROR")) or f in ("INVALID_JSON_SYNTAX", "JSON_NOT_AN_OBJECT", "MISSING_BULLET_LIST_FORMAT") for f in flags)
         passed = (score >= self.threshold) and not has_schema_error
 
         return AgentScore(

@@ -70,10 +70,11 @@ pip install pydantic pytest
 python main.py
 ```
 
-### 3. Evaluate Custom JSON Payload
+### 3. Evaluate Custom JSON Payload or Export Full JSON Rubric
 
 ```bash
-python main.py --file sample_input.json --verbose
+python main.py --json
+python main.py --file path/to/cases.json
 ```
 
 ---

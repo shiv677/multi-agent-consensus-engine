@@ -97,11 +97,29 @@ def test_schema_sentinel_pydantic_v2_strict_typing():
     assert "STRICT_SCHEMA_PASSED" in res_valid.flags
 
     # Type violation (string instead of integer)
-    invalid_type_payload = '{"item_id": "SKU-99", "quantity": "not_an_int"}'
+    invalid_type_payload = '{"item_id": "SKU-99", "quantity": "4"}'
     res_invalid = agent.evaluate(invalid_type_payload, required_format="json", expected_schema=schema)
     assert not res_invalid.passed
     assert res_invalid.score < 1.0
+    assert any("TYPE_ERROR_quantity" in f for f in res_invalid.flags)
     assert any("MISSING_KEYS_quantity" in f for f in res_invalid.flags)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_sample_uses_structured_output_and_chain_of_thought():
+    engine = ConsensusEngine()
+    sample = EvaluationSample(
+        id="sample_struct_cot",
+        prompt="Return user object",
+        response="",
+        structured_output={"user": "alice"},
+        chain_of_thought="Because X holds, therefore Y follows.",
+        required_format="json",
+        required_keys=["user"],
+    )
+    res = await engine.evaluate_sample(sample)
+    assert res.agent_scores["SchemaSentinel"].passed is True
+    assert res.agent_scores["ReasoningCritic"].passed is True
 
 
 def test_consensus_engine_approval():

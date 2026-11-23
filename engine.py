@@ -85,6 +85,7 @@ class ConsensusEngine:
             format_str = s.required_format
             keys_val = s.required_keys
             schema_val = s.expected_schema
+            eval_target: Any = s
         else:
             task_id_str = str(task_id)
             prompt_str = prompt
@@ -93,15 +94,16 @@ class ConsensusEngine:
             format_str = required_format
             keys_val = required_keys
             schema_val = expected_schema
+            eval_target = response_str
 
         notes: List[str] = []
 
         # Round 1: Asynchronous parallel evaluations
         v_ground, v_reason, v_schema = await asyncio.gather(
-            self.grounding_agent.evaluate_async(response_str, context=context_str),
-            self.reasoning_critic.evaluate_async(response_str),
+            self.grounding_agent.evaluate_async(eval_target, context=context_str),
+            self.reasoning_critic.evaluate_async(eval_target),
             self.schema_sentinel.evaluate_async(
-                response_str,
+                eval_target,
                 required_format=format_str,
                 required_keys=keys_val,
                 expected_schema=schema_val,
@@ -127,12 +129,12 @@ class ConsensusEngine:
             # Cross-agent feedback sharing in asynchronous debate
             v_ground_r2, v_reason_r2 = await asyncio.gather(
                 self.grounding_agent.evaluate_async(
-                    response_str,
+                    eval_target,
                     context=context_str,
                     peer_feedback=v_reason.flags + v_schema.flags,
                 ),
                 self.reasoning_critic.evaluate_async(
-                    response_str,
+                    eval_target,
                     peer_feedback=v_ground.flags + v_schema.flags,
                 ),
             )
